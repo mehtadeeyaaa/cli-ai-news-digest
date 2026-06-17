@@ -7,7 +7,13 @@ from google import genai  #for interacting with Google GenAI API
 from dotenv import load_dotenv
 load_dotenv()
 
-client = genai.Client()  #initializes Google GenAI client
+from openai import AsyncOpenAI
+import os
+
+client = AsyncOpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY")
+)
 
 #Fetching  story from Hacker News API
 
@@ -76,6 +82,21 @@ async def main():
             print(f" [{row[2]}] {row[1][:50]}")  #prints the story URL and title
 
 async def generate_summary(client, story, retries=4):
-    return f"Placeholder summary for: {story.get('title')}"  # TODO: swap back once quota issue is resolved
-
+    for attempt in range(retries):
+        try:
+            response = await client.chat.completions.create(
+                model="openai/gpt-4o-mini",  # or any model slug from openrouter.ai/models
+                messages=[
+                    {"role": "user", "content": f"Summarize the following news story in two sentences: {story.get('title')}"}
+                ]
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            if attempt == retries - 1:
+                print(f"Failed to summarize story {story.get('id')}: {e}")
+                return None
+            await asyncio.sleep(2 ** attempt)
+            
 asyncio.run(main())  #runs the main function in the event loop
+
+
