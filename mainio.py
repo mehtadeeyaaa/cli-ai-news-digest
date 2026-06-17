@@ -3,6 +3,11 @@ import asyncio  #managing asynchronous tasks
 import time  #for measuring elapsed time
 import aiosqlite  #for async SQLite database operations
 from datetime import datetime, timezone  #for handling date and time
+from google import genai  #for interacting with Google GenAI API
+from dotenv import load_dotenv
+load_dotenv()
+
+client = genai.Client()  #initializes Google GenAI client
 
 #Fetching  story from Hacker News API
 
@@ -29,7 +34,7 @@ async def main():
     
     #Initialize database
 
-    async with aiosqlite.connect("hn_stories.db") as db:  #opens SQLite database
+    async with aiosqlite.connect("hn_stories.db", timeout=10) as db:  #opens SQLite database
          #runs SQL statement
         await db.execute("""       
             CREATE TABLE IF NOT EXISTS story (
@@ -56,8 +61,10 @@ async def main():
         #Save stories to the database
 
         for story in stories:
-            if story:  #checks if the story is not None
-                await save_story(db, story)  #saves the story to the database
+            if story:
+                story["summary"] = await generate_summary(client, story)
+                await save_story(db, story)
+                await asyncio.sleep(7)  # ~8-9 requests/minute, safely under the 10 RPM free-tier cap
         await db.commit()  #commits the changes to the database
 
         #Query and display stories
@@ -67,5 +74,8 @@ async def main():
         print(f"Saved {len([s for s in stories if s])} stories to the database. Top 5 by fetched_at:")  #prints the number of saved stories
         for row in rows:
             print(f" [{row[2]}] {row[1][:50]}")  #prints the story URL and title
+
+async def generate_summary(client, story, retries=4):
+    return f"Placeholder summary for: {story.get('title')}"  # TODO: swap back once quota issue is resolved
 
 asyncio.run(main())  #runs the main function in the event loop
